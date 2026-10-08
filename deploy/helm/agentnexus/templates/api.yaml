@@ -1,0 +1,122 @@
+{{- $fn := include "agentnexus.fullname" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fn }}-api
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicas }}
+  {{- end }}
+  strategy: { type: RollingUpdate, rollingUpdate: { maxSurge: 1, maxUnavailable: 0 } }
+  selector:
+    matchLabels: {{- include "agentnexus.selector" (list . "api") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "agentnexus.selector" (list . "api") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}  # 시크릿 교체도 재기동 (D20-③)
+        {{- with .Values.secrets.rotationNonce }}
+        agentnexus/rotation-nonce: {{ . | quote }}  # existingSecret 키 교체 — 값을 바꿔 재기동 (D22-②)
+        {{- end }}
+        {{- with .Values.api.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
+    spec:
+      {{- include "agentnexus.podCommon" . | nindent 6 }}
+      # 마이그레이션·시드는 initContainer 가 수행 (PostgreSQL advisory lock 으로 다중 파드 동시 기동에도 직렬화). DB 준비 전에는 재시도.
+      initContainers:
+        - name: migrate
+          image: {{ include "agentnexus.image" (list . .Values.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["true"]
+          env:
+            - { name: AGENTNEXUS_ROLE, value: api }
+            - { name: AUTO_MIGRATE, value: "true" }
+          envFrom:
+            - configMapRef: { name: {{ $fn }}-config }
+            - secretRef: { name: {{ include "agentnexus.secretName" . }} }
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /app/data }
+            - { name: tmp, mountPath: /tmp }
+      containers:
+        - name: api
+          image: {{ include "agentnexus.image" (list . .Values.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "{{ .Values.api.workers }}", "--proxy-headers", "--forwarded-allow-ips", {{ .Values.api.forwardedAllowIps | quote }}]
+          env:
+            - { name: AGENTNEXUS_ROLE, value: api }
+            - { name: AUTO_MIGRATE, value: "false" }
+          envFrom:
+            - configMapRef: { name: {{ $fn }}-config }
+            - secretRef: { name: {{ include "agentnexus.secretName" . }} }
+          ports:
+            - { name: http, containerPort: 8000 }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:  # 프로세스 생존만 — /health 는 DB 를 확인하므로 DB 장애 때 api 파드를 재시작시키지 않게 (준비성에만 사용)
+            tcpSocket: { port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /app/data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim: { claimName: {{ .Values.persistence.existingClaim | default (printf "%s-data" $fn) }} }
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - { name: tmp, emptyDir: {} }
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- range . }}
+        - {{- toYaml (merge (dict) . (dict "labelSelector" (dict "matchLabels" (include "agentnexus.selector" (list $ "api") | fromYaml)))) | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fn }}-api
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  type: {{ .Values.service.type }}
+  selector: {{- include "agentnexus.selector" (list . "api") | nindent 4 }}
+  ports:
+    - { name: http, port: {{ .Values.service.port }}, targetPort: http }
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fn }}-data
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [{{ .Values.persistence.accessMode }}]
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests: { storage: {{ .Values.persistence.size }} }
+{{- end }}

@@ -1,0 +1,36 @@
+# wise-agentnexus — prod 모드: runtime 스테이지 + DB_ENGINE RDBMS (postgres)
+services:
+  api:
+    env_file: [".env.prod"]
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+  mcp-servers:
+    env_file: [".env.prod"]
+    restart: unless-stopped
+  a2a-demo:
+    env_file: [".env.prod"]
+    restart: unless-stopped
+  a2a-grpc:  # 엣지에 노출되는 상태 없는 위임 서비스 — .env.prod 전체(서명 키·DB 비밀번호 등) 대신 필요한 값만 (D20-③)
+    environment:
+      APP_ENV: ${APP_ENV:-prod}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      A2A_GRPC_TLS_CERT: ${A2A_GRPC_TLS_CERT:-}
+      A2A_GRPC_TLS_KEY: ${A2A_GRPC_TLS_KEY:-}
+    restart: unless-stopped
+  db:
+    image: ${DB_IMAGE:-postgres:17-alpine}
+    environment:
+      POSTGRES_USER: ${DB_USER:?DB_USER 필요 / required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 필요 / required}
+      POSTGRES_DB: ${DB_NAME:-app}
+    volumes: ["dbdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+    restart: unless-stopped
+volumes:
+  dbdata:

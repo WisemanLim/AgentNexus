@@ -1,0 +1,7 @@
+# 에어갭: 사설 레지스트리 · 데모 끔 · 외부 SaaS 없음
+global:
+  imageRegistry: registry.internal:5000
+  imagePullSecrets: [{ name: regcred }]
+demo: { enabled: false }
+publicBaseUrl: https://agentnexus.corp.internal
+ingress: { enabled: true, className: nginx, host: agentnexus.corp.internal, annotations: { nginx.ingress.kubernetes.io/proxy-buffering: "off" }, tls: [{ secretName: agentnexus-tls, hosts: [agentnexus.corp.internal] }] }

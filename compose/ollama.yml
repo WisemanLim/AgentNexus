@@ -1,0 +1,20 @@
+# 로컬 모델 (선택, profile=ollama) — 에어갭 배포 프로파일(L01 airgap)의 로컬 LLM (FR-L02·P02, NFR-D1).
+# 사용: COMPOSE_PROFILES=demo,ollama make prod-all → 콘솔 I01 에서 공급자 "Ollama (로컬)"(http://ollama:11434/v1) 활성화.
+# 에어갭: 연결된 호스트에서 `docker compose ... exec ollama ollama pull qwen2.5:7b`(시드 별칭 `ollama/qwen`) 후 ollama-models 볼륨을 반입하거나
+#        `nexus bundle export --image ollama/ollama:0.31.1 …` 로 이미지를 함께 묶는다(모델 가중치는 볼륨으로 별도 반입).
+services:
+  ollama:
+    image: ollama/ollama:0.31.1
+    profiles: ["ollama"]
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    volumes: ["ollama-models:/root/.ollama"]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ollama-models:

@@ -1,0 +1,26 @@
+.git
+.env
+.env.*
+data/
+test/**/logs/
+node_modules/
+**/node_modules/
+target/
+build/
+bin/
+obj/
+.venv/
+__pycache__/
+.review/
+web/dist/
+web/e2e/results/
+# 이미지(특히 prod·에어갭 번들)에 넣지 않는 작업 산출물·원본 문서 — 시험은 local 바인드 마운트로 돈다
+.docs/
+.omc/
+.wds/
+.github/
+.pytest_cache/
+.ruff_cache/
+test/
+dist/
+**/.DS_Store

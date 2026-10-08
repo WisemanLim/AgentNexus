@@ -1,0 +1,51 @@
+{{- include "agentnexus.validate" . -}}
+{{- $fn := include "agentnexus.fullname" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fn }}-config
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+data:
+  APP_ENV: prod
+  DB_ENGINE: postgres
+  PUBLIC_BASE_URL: {{ .Values.publicBaseUrl | quote }}
+  COMPONENTS: {{ .Values.components | quote }}
+  IDP_INTERNAL_URL: http://{{ $fn }}-api:{{ .Values.service.port }}
+  GATEWAY_URL: http://{{ $fn }}-api:{{ .Values.service.port }}
+  MCP_SERVERS_URL: http://{{ $fn }}-mcp-servers:8100
+  A2A_DEMO_URL: http://{{ $fn }}-a2a-demo:8200
+  SEED_DEMO: {{ .Values.demo.enabled | quote }}  # 데모 서비스가 없으면 데모 행(참조 MCP·A2A·워크로드·KB)도 만들지 않는다 (D19-④)
+  RATE_LIMIT_BACKEND: {{ .Values.config.rateLimitBackend | quote }}
+  VALKEY_URL: {{ .Values.valkey.url | default (printf "redis://%s-valkey:6379/0" $fn) | quote }}
+  POLICY_ENGINE: {{ .Values.config.policyEngine | quote }}
+  OPA_URL: http://{{ $fn }}-opa:8181
+  ACCESS_TOKEN_TTL: {{ .Values.config.accessTokenTtl | quote }}
+  MCP_REFRESH_ON_START_S: {{ .Values.config.mcpRefreshOnStartS | quote }}
+  MCP_HEALTH_INTERVAL_S: {{ .Values.config.mcpHealthIntervalS | quote }}
+  MCP_STDIO_ALLOWED_COMMANDS: {{ .Values.config.mcpStdioAllowedCommands | quote }}
+  A2A_WATCH_INTERVAL_S: {{ .Values.config.a2aWatchIntervalS | quote }}
+  MCP_CONSENT_TIMEOUT_S: {{ .Values.config.mcpConsentTimeoutS | quote }}
+  SCHEDULER_INTERVAL_S: {{ .Values.config.schedulerIntervalS | quote }}
+  DB_STATEMENT_TIMEOUT_MS: {{ .Values.config.dbStatementTimeoutMs | quote }}
+  DB_LOCK_TIMEOUT_MS: {{ .Values.config.dbLockTimeoutMs | quote }}
+  DB_IDLE_TX_TIMEOUT_MS: {{ .Values.config.dbIdleTxTimeoutMs | quote }}
+  SIGNING_KEY_PREVIOUS_UNTIL: {{ .Values.config.signingKeyPreviousUntil | quote }}
+  SIGNING_REVOKED_KIDS: {{ .Values.config.signingRevokedKids | quote }}
+  MODEL_MAX_INFLIGHT_PER_SUBJECT: {{ .Values.config.modelMaxInflightPerSubject | quote }}
+  RETENTION_INTERVAL_S: {{ .Values.config.retentionIntervalS | quote }}
+  RUN_STALE_S: {{ .Values.config.runStaleS | quote }}
+  A2A_REMOTE_WAIT_S: {{ .Values.config.a2aRemoteWaitS | quote }}
+  A2A_GRPC_PUBLIC_URL: {{ ternary .Values.a2aGrpc.publicUrl "" .Values.a2aGrpc.enabled | quote }}  # a2a-grpc 를 켜고 주소를 줄 때만 카드에 GRPC
+  A2A_GRPC_TLS_CERT: {{ ternary "/tls/tls.crt" "" (not (empty .Values.a2aGrpc.tls.secretName)) | quote }}
+  A2A_GRPC_TLS_KEY: {{ ternary "/tls/tls.key" "" (not (empty .Values.a2aGrpc.tls.secretName)) | quote }}
+  ATTACHMENT_MAX_MB: {{ .Values.config.attachmentMaxMb | quote }}
+  OTLP_ENDPOINT: {{ .Values.config.otlpEndpoint | quote }}
+  SPAN_PROCESSOR: {{ .Values.config.spanProcessor | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  UVICORN_WORKERS: {{ .Values.api.workers | quote }}
+  ANX_TARGET_VERSION: {{ .Values.config.targetVersion | quote }}
+  COSIGN_PUBLIC_KEY: {{ .Values.config.cosignPublicKey | quote }}
+  DATA_DIR: /app/data
+  {{- range $k, $v := .Values.api.extraEnv }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}

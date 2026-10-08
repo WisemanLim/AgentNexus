@@ -1,0 +1,14 @@
+# Valkey (BSD-3, Redis 프로토콜 호환) — 레이트리밋 토큰 버킷 카운터 (FR-G04). make 가 compose/*.yml 을 자동 포함한다.
+# 호스트 포트 미공개: 게이트웨이만 접근 (NFR-SEC1). 디버그는 `make shell` 후 컨테이너 네트워크에서 접속.
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [backend]
+  api:
+    depends_on:
+      valkey: { condition: service_healthy }

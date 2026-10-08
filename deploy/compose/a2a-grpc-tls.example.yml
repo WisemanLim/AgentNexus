@@ -1,0 +1,15 @@
+# a2a-grpc 직접 TLS 수신 — prod 오버레이 예시 (D22-⑥). `compose/` 가 아니라 여기에 둔다(Makefile 이 compose/*.yml 을 자동 포함).
+# A2A_GRPC_TLS_CERT·KEY 는 컨테이너 안 파일 경로 — 인증서를 볼륨으로 넣어야 한다(경로만 주면 파일이 없어 재시작을 반복).
+# 사용:
+#   mkdir -p certs/a2a-grpc && cp tls.crt tls.key certs/a2a-grpc/   # 운영자가 준비한 인증서 (저장소에 커밋하지 않음)
+#   docker compose -p wise-agentnexus-prod -f docker-compose.yml -f docker-compose.prod.yml \
+#     -f compose/valkey.yml -f deploy/compose/a2a-grpc-tls.example.yml --env-file .env.prod up -d a2a-grpc
+# 컨테이너는 uid 10001 로 돈다 — `sudo chown 10001 certs/a2a-grpc/tls.key && chmod 600 …` (SELinux 면 볼륨에 `:z`), 아니면 키를 못 읽어 재시작 반복.
+# TLS 수신이면 헬스 검사는 TCP 연결만 본다(`--probe` — gRPC 헬스는 TLS 를 말하지 못한다).
+services:
+  a2a-grpc:
+    volumes:
+      - ./certs/a2a-grpc:/certs:ro
+    environment:
+      A2A_GRPC_TLS_CERT: /certs/tls.crt
+      A2A_GRPC_TLS_KEY: /certs/tls.key

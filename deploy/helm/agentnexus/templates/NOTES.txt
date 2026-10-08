@@ -1,0 +1,13 @@
+AgentNexus {{ .Chart.AppVersion }} — 구성요소: {{ .Values.components }}
+
+1) 상태:      kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+2) 헬스 시험:  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+3) 접속:      {{ if .Values.ingress.enabled }}{{ .Values.publicBaseUrl }}/console{{ else }}kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "agentnexus.fullname" . }}-api 8800:{{ .Values.service.port }} → http://127.0.0.1:8800/console{{ end }}
+4) 첫 관리자:  사용자 admin · 비밀번호 = Secret {{ include "agentnexus.secretName" . }} 의 BOOTSTRAP_ADMIN_PASSWORD
+              kubectl -n {{ .Release.Namespace }} get secret {{ include "agentnexus.secretName" . }} -o jsonpath='{.data.BOOTSTRAP_ADMIN_PASSWORD}' | base64 -d
+
+- 서명 키·암호화 키는 Secret 에 보존됩니다(helm.sh/resource-policy: keep). 분실 시 기존 토큰·암호화된 시크릿을 읽을 수 없습니다.
+- SSE(채팅·스트리밍)는 프록시 버퍼링을 끄세요 (ingress-nginx: nginx.ingress.kubernetes.io/proxy-buffering: "off").
+{{- if .Values.demo.enabled }}
+- 데모 참조 서버(가상 데이터)가 함께 실행 중입니다. 운영에서는 demo.enabled=false 로 끄세요.
+{{- end }}

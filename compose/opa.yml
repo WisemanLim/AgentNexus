@@ -1,0 +1,9 @@
+# OPA (선택, profile=opa) — POLICY_ENGINE=opa 일 때 게이트웨이가 policies/agentnexus.rego 로 판정 (FR-G03 어댑터).
+# 사용: COMPOSE_PROFILES=demo,opa make local-all  (+ .env.local 의 POLICY_ENGINE=opa, OPA_URL=http://opa:8181)
+services:
+  opa:
+    image: openpolicyagent/opa:1.4.2
+    profiles: ["opa"]
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
+    volumes: ["./policies:/policies:ro"]
+    networks: [backend]

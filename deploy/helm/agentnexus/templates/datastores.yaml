@@ -1,0 +1,163 @@
+{{- $fn := include "agentnexus.fullname" . -}}
+{{- if .Values.postgresql.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fn }}-postgresql
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  serviceName: {{ $fn }}-postgresql
+  replicas: 1
+  selector:
+    matchLabels: {{- include "agentnexus.selector" (list . "postgresql") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "agentnexus.selector" (list . "postgresql") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: { fsGroup: 70, runAsUser: 70, runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: postgresql
+          image: {{ include "agentnexus.image" (list . .Values.postgresql.image) }}
+          env:
+            - { name: POSTGRES_USER, value: {{ .Values.postgresql.username | quote }} }
+            - { name: POSTGRES_DB, value: {{ .Values.postgresql.database | quote }} }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "agentnexus.secretName" . }}, key: DB_PASSWORD } }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports:
+            - { name: pg, containerPort: 5432 }
+          readinessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""] }
+            periodSeconds: 5
+          resources: {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: pgdata, mountPath: /var/lib/postgresql/data }
+            - { name: run, mountPath: /var/run/postgresql }
+      volumes:
+        - { name: run, emptyDir: {} }
+  volumeClaimTemplates:
+    - metadata: { name: pgdata }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.postgresql.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources: { requests: { storage: {{ .Values.postgresql.storage.size }} } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fn }}-postgresql
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  selector: {{- include "agentnexus.selector" (list . "postgresql") | nindent 4 }}
+  ports:
+    - { name: pg, port: 5432, targetPort: pg }
+{{- end }}
+{{- if .Values.valkey.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fn }}-valkey
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "agentnexus.selector" (list . "valkey") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "agentnexus.selector" (list . "valkey") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: { runAsNonRoot: true, runAsUser: 999, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: valkey
+          image: {{ include "agentnexus.image" (list . .Values.valkey.image) }}
+          args: ["valkey-server", "--save", "", "--appendonly", "no"]
+          ports:
+            - { name: valkey, containerPort: 6379 }
+          readinessProbe:
+            exec: { command: ["valkey-cli", "ping"] }
+            periodSeconds: 5
+          resources: {{- toYaml .Values.valkey.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - { name: data, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fn }}-valkey
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  selector: {{- include "agentnexus.selector" (list . "valkey") | nindent 4 }}
+  ports:
+    - { name: valkey, port: 6379, targetPort: valkey }
+{{- end }}
+{{- if .Values.opa.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fn }}-opa-policies
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+data:
+  agentnexus.rego: |-
+{{ .Files.Get "files/agentnexus.rego" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fn }}-opa
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "agentnexus.selector" (list . "opa") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "agentnexus.selector" (list . "opa") | nindent 8 }}
+      annotations:
+        checksum/policy: {{ .Files.Get "files/agentnexus.rego" | sha256sum }}
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 1000, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: opa
+          image: {{ include "agentnexus.image" (list . .Values.opa.image) }}
+          args: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
+          ports:
+            - { name: http, containerPort: 8181 }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: policies, mountPath: /policies, readOnly: true }
+      volumes:
+        - name: policies
+          configMap: { name: {{ $fn }}-opa-policies }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fn }}-opa
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+spec:
+  selector: {{- include "agentnexus.selector" (list . "opa") | nindent 4 }}
+  ports:
+    - { name: http, port: 8181, targetPort: http }
+{{- end }}

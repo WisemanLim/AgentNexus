@@ -1,0 +1,32 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+permissions:
+  contents: read            # 최소 권한 — 쓰기 권한이 필요한 단계 없음 (D17-③)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+# 액션은 커밋 SHA 고정(태그는 주석) — Dependabot(github-actions)이 SHA·주석을 함께 갱신 PR 로 올린다 (D19-③)
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - run: test -f .env.prod || cp .env.example .env.prod
+      - run: make preflight
+      - run: make lint
+      - run: make test
+      - run: make test-pg
+      - run: make web-test
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4  # v4.3.1
+      - run: make helm-check
+      - run: docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod build
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - run: test -f .env.prod || cp .env.example .env.prod
+      - run: make audit

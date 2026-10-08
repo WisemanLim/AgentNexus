@@ -1,0 +1,13 @@
+apiVersion: v2
+name: agentnexus
+description: AgentNexus — MCP + AI Gateway + A2A 통합 에이전트 플랫폼 (콘솔·게이트웨이·레지스트리·호스트·관측)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.27.0-0"
+keywords: [mcp, a2a, ai-gateway, agents, llm]
+home: https://github.com/agentnexus
+annotations:
+  artifacthub.io/license: Apache-2.0
+  agentnexus.io/mcp-protocol: "2025-11-25"
+  agentnexus.io/a2a-protocol: "0.3,1.0"

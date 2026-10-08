@@ -1,0 +1,55 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $fn := include "agentnexus.fullname" . -}}
+# backend(참조 MCP·A2A·DB·Valkey·OPA) 는 api 파드에서만 수신 — compose 의 internal backend 네트워크와 같은 우회 차단 (FR-G00)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fn }}-backend
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/instance, operator: In, values: [{{ .Release.Name | quote }}] }
+      - { key: app.kubernetes.io/component, operator: In, values: [mcp-servers, a2a-demo, postgresql, valkey, opa] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {{- include "agentnexus.selector" (list . "api") | nindent 14 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fn }}-api
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "agentnexus.selector" (list . "api") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports: [{ port: 8000, protocol: TCP }]
+      {{- if .Values.networkPolicy.ingressFrom }}
+      from: {{- toYaml .Values.networkPolicy.ingressFrom | nindent 8 }}
+        - podSelector:  # 같은 릴리스의 내부 호출자 — api(오케스트레이터 → GATEWAY_URL)·참조 MCP(JWKS)·데모 A2A(토큰)·a2a-grpc(REST 위임) (D19-④)
+            matchExpressions:
+              - { key: app.kubernetes.io/instance, operator: In, values: [{{ .Release.Name | quote }}] }
+              - { key: app.kubernetes.io/component, operator: In, values: [api, mcp-servers, a2a-demo, a2a-grpc] }
+      {{- end }}
+{{- if .Values.a2aGrpc.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fn }}-a2a-grpc
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "agentnexus.selector" (list . "a2a-grpc") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports: [{ port: 50051, protocol: TCP }]
+      {{- with .Values.networkPolicy.ingressFrom }}
+      from: {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

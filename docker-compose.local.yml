@@ -1,0 +1,54 @@
+# wise-agentnexus — local 모드: SQLite + dev 스테이지 + 소스 바인드(핫리로드)
+services:
+  api:
+    build: { target: dev }
+    env_file: [".env.local"]
+    volumes:
+      - ./:/app
+      - appdata:/app/data
+  mcp-servers:
+    build: { target: dev }
+    env_file: [".env.local"]
+    command: ["uvicorn", "app.builtin.mcp_servers:app", "--host", "0.0.0.0", "--port", "8100", "--reload"]
+    volumes:
+      - ./:/app
+      - appdata:/app/data:ro
+  a2a-grpc:
+    build: { target: dev }
+    env_file: [".env.local"]
+    volumes:
+      - ./:/app
+  a2a-demo:
+    build: { target: dev }
+    env_file: [".env.local"]
+    command: ["uvicorn", "app.builtin.a2a_agent:app", "--host", "0.0.0.0", "--port", "8200", "--reload"]
+    volumes:
+      - ./:/app
+      - appdata:/app/data:ro
+  # 콘솔 SPA 개발 서버 (HMR) — COMPOSE_PROFILES=demo,web make local-all → http://127.0.0.1:${WEB_PORT}/console
+  # (기본은 api 가 web/dist 를 서빙: make web-build) · API·IdP 는 api 컨테이너로 프록시
+  web:
+    profiles: [web]
+    build: { target: web-dev }
+    environment:
+      VITE_API_TARGET: http://api:8000
+    ports: ["${BIND_HOST:-127.0.0.1}:${WEB_PORT:-5173}:5173"]
+    volumes:
+      - ./web/src:/web/src
+      - ./web/public:/web/public
+      - ./web/index.html:/web/index.html
+      - ./web/vite.config.ts:/web/vite.config.ts
+      - ./web/dist:/web/dist
+    networks: [edge]
+    depends_on: [api]
+  # 콘솔 브라우저 스모크 — make web-e2e (결과: web/e2e/results)
+  e2e:
+    profiles: [e2e]
+    build: { target: e2e }
+    environment:
+      E2E_TARGET: api:8000
+    volumes:
+      - ./web/e2e/results:/e2e/results
+    shm_size: 1gb
+    networks: [edge]
+    depends_on: [api]

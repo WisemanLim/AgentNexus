@@ -1,0 +1,105 @@
+{{- $fn := include "agentnexus.fullname" . -}}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fn }}
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: {{ $fn }}-api, port: { name: http } }
+{{- end }}
+{{- if .Values.httpRoute.enabled }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $fn }}
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+spec:
+  parentRefs: {{- toYaml .Values.httpRoute.parentRefs | nindent 4 }}
+  hostnames: {{- toYaml .Values.httpRoute.hostnames | nindent 4 }}
+  rules:
+    - matches: [{ path: { type: PathPrefix, value: / } }]
+      backendRefs: [{ name: {{ $fn }}-api, port: {{ .Values.service.port }} }]
+{{- end }}
+{{- if .Values.metrics.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $fn }}
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      authorization:
+        type: Bearer
+        credentials: { name: {{ include "agentnexus.secretName" . }}, key: METRICS_TOKEN }
+{{- end }}
+{{- if .Values.metrics.prometheusRule.enabled }}
+---
+# 경보 규칙 (FR-O03) — 앱 내장 경보(SCR-K05, 예약 평가)와 별도로 Prometheus/Alertmanager 로 보낼 때
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $fn }}
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: agentnexus.gateway
+      rules:
+        - alert: AgentNexusHighErrorRate
+          expr: sum(rate(anx_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(anx_http_requests_total[5m])), 1) > {{ .Values.metrics.prometheusRule.errorRate }}
+          for: 5m
+          labels: { severity: warning }
+          annotations: { summary: "AgentNexus 5xx 비율이 {{ .Values.metrics.prometheusRule.errorRate }} 초과" }
+        - alert: AgentNexusHighLatencyP95
+          expr: histogram_quantile(0.95, sum by (le) (rate(anx_http_request_duration_seconds_bucket[5m]))) > {{ .Values.metrics.prometheusRule.p95Seconds }}
+          for: 10m
+          labels: { severity: warning }
+          annotations: { summary: "게이트웨이 p95 지연이 {{ .Values.metrics.prometheusRule.p95Seconds }}s 초과" }
+        - alert: AgentNexusApprovalsPending
+          expr: anx_approvals_pending > {{ .Values.metrics.prometheusRule.approvalsPending }}
+          for: 15m
+          labels: { severity: info }
+          annotations: { summary: "사람 승인 대기가 쌓였습니다 (SCR-H12)" }
+        - alert: AgentNexusPolicyDenySpike
+          expr: sum(rate(anx_policy_denies_total[5m])) > {{ .Values.metrics.prometheusRule.denyRate }}
+          for: 5m
+          labels: { severity: warning }
+          annotations: { summary: "정책 거부·한도 초과 급증 — 우회 시도·오남용 점검" }
+{{- end }}
+{{- if .Values.serviceAccount.create }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "agentnexus.serviceAccountName" . }}
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: false
+{{- end }}

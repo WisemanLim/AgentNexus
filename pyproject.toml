@@ -1,0 +1,46 @@
+[project]
+name = "wise-agentnexus"
+version = "0.1.0"
+description = "AgentNexus — MCP + AI Gateway + A2A 통합 에이전트 플랫폼"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.3",
+  "sqlalchemy>=2.0",
+  "alembic>=1.13",
+  "psycopg[binary]>=3.2",
+  "httpx>=0.27",
+  "pyjwt[crypto]>=2.9",
+  "cryptography>=43",
+  "pyyaml>=6",
+  "jsonschema>=4.23",
+  "python-multipart>=0.0.9",
+  "redis>=5.0",
+  "prometheus-client>=0.20",
+  "opentelemetry-api>=1.27",
+  "opentelemetry-sdk>=1.27",
+  "opentelemetry-exporter-otlp-proto-http>=1.27",
+  "fastmcp>=2.12",
+  "typer>=0.12",
+  "grpcio>=1.66",          # A2A gRPC 바인딩 (D16-②)
+  "a2a-sdk>=1.2",          # 정규 lf.a2a.v1 생성 스텁(a2a_pb2·a2a_pb2_grpc)
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.5", "openai>=1.50"]
+
+# 모든 테스트는 test/ 로 통일 (시험표준 dev-env/impl 도 test/ 하위)
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["."]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.uv]
+package = false

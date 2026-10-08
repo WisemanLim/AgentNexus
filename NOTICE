@@ -1,0 +1,19 @@
+AgentNexus
+Copyright 2026 AgentNexus contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes third-party software and fonts under their own licenses.
+The full list with versions and license identifiers is in THIRD_PARTY_LICENSES.md
+(regenerate with `make licenses`). In particular:
+
+- Pretendard (font, bundled in the web console) — Copyright (c) 2021, Kil Hyung-jin,
+  with Reserved Font Name Pretendard. SIL Open Font License 1.1 — the license text is
+  shipped at web/public/licenses/Pretendard-OFL-1.1.txt (served as /licenses/ in the console bundle).
+- psycopg / psycopg-binary — GNU Lesser General Public License v3.0 only. Used unmodified
+  through dynamic import as the PostgreSQL driver; it can be replaced by another SQLAlchemy driver.
+- certifi — Mozilla Public License 2.0 (unmodified CA bundle).
+
+Container base images (python, node, playwright, postgres, valkey) carry their own
+distribution licenses, including GPL-licensed operating system packages; their sources
+are available from the respective upstream distributions.

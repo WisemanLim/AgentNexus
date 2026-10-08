@@ -1,0 +1,6 @@
+node_modules
+dist
+*.local
+coverage
+e2e/results
+e2e/node_modules

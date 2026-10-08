@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+/* dark: 변형 = 명시 테마(data-theme=dark) 또는 시스템 다크(명시 light 가 아닐 때) — 토큰과 같은 규칙 (D14-①) */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) { @slot; }
+  }
+}
+
+/* 디자인 토큰 (UI 설계서 8장) — 색은 의미만, 텍스트를 함께 표기 */
+:root {
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --surface-2: #f8f9fc;
+  --fg: #1f2937;
+  --fg-muted: #5b6472; /* 배경 #f5f6fa 대비 5.6:1 (WCAG 1.4.3) */
+  --line: #e5e7eb;
+  --navy: #1f3864;
+  --primary-soft: #eef0fd;
+  /* 의미 색을 글자색으로 쓸 때(밝은 배경) — 4.5:1 이상 (WCAG 1.4.3). 배경·테두리는 원래 색 그대로 */
+  --ok-fg: #1b7a30; --warn-fg: #8a5a00; --danger-fg: #a61e1e; --model-fg: #0a6b7a; --profile-fg: #a33508;
+  --primary-fg: #3f51e5; --mcp-fg: #3f51e5; --a2a-fg: #6741d9;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0f1420;
+  --surface: #171d2b;
+  --surface-2: #1d2434;
+  --fg: #e5e7eb;
+  --fg-muted: #9ca3af;
+  --line: #2a3346;
+  --navy: #c7d2fe;
+  --primary-soft: #252c55;
+  --ok-fg: #4ade80; --warn-fg: #fbbf24; --danger-fg: #f87171; --model-fg: #22d3ee; --profile-fg: #fb923c;
+  --primary-fg: #8b9cff; --mcp-fg: #8b9cff; --a2a-fg: #b197fc; /* 어두운 배경 대비 4.5:1 이상 (D14-①) */
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1420;
+    --surface: #171d2b;
+    --surface-2: #1d2434;
+    --fg: #e5e7eb;
+    --fg-muted: #9ca3af;
+    --line: #2a3346;
+    --navy: #c7d2fe;
+    --primary-soft: #252c55;
+    --ok-fg: #4ade80; --warn-fg: #fbbf24; --danger-fg: #f87171; --model-fg: #22d3ee; --profile-fg: #fb923c;
+    --primary-fg: #8b9cff; --mcp-fg: #8b9cff; --a2a-fg: #b197fc; /* 어두운 배경 대비 4.5:1 이상 (D14-①) */
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-line: var(--line);
+  --color-navy: var(--navy);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary: #3f51e5;
+  --color-mcp: #3f51e5;
+  --color-a2a: #7048e8;
+  --color-model: #0c8599;
+  --color-profile: #c2410c;
+  --color-ok: #2f9e44;
+  --color-warn: #e8a317;
+  --color-danger: #c92a2a;
+  --color-muted: #868e96;
+  --font-sans: "Pretendard Variable", Pretendard, "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid #3f51e5; outline-offset: 1px; }
+/* 접근성 (KWCAG 2.2 · WCAG 2.2 AA) — 본문 속 링크는 색 외 밑줄로 구분(1.4.1), 작은 선택 상자는 간격으로 24px 목표 확보(2.5.8) */
+:is(p, td, dd, li:not(nav li)) a:not([role]) { text-decoration: underline; text-underline-offset: 2px; }
+input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; margin: 3px; }
+.text-ok { color: var(--ok-fg); } .text-warn { color: var(--warn-fg); } .text-danger { color: var(--danger-fg); }
+.text-model { color: var(--model-fg); } .text-profile { color: var(--profile-fg); }
+.text-primary { color: var(--primary-fg); } .text-mcp { color: var(--mcp-fg); } .text-a2a { color: var(--a2a-fg); }
+code, pre, .mono { font-family: var(--font-mono); font-size: 13px; }
+.react-flow .react-flow__attribution { background: rgba(255, 255, 255, 0.9); }
+.react-flow .react-flow__attribution a { color: #374151; } /* 그래프 저작 표시 대비 (WCAG 1.4.3) */

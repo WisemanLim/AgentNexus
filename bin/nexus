@@ -1,0 +1,4 @@
+#!/bin/sh
+# AgentNexus CLI 래퍼 — 저장소 루트 기준 실행 (컨테이너: /usr/local/bin/nexus). 호스트: uv run bin/nexus … 또는 make shell 후 nexus
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" exec python -m app.cli "$@"

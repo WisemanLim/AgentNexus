@@ -1,0 +1,39 @@
+{{- $fn := include "agentnexus.fullname" . -}}
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $fn }}-api
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: {{ $fn }}-api }
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }} } }
+{{- end }}
+{{- if and .Values.podDisruptionBudget.enabled (include "agentnexus.multiReplica" .) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fn }}-api
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels: {{- include "agentnexus.selector" (list . "api") | nindent 6 }}
+{{- end }}
+{{- if and .Values.podDisruptionBudget.enabled .Values.a2aGrpc.enabled (gt (int .Values.a2aGrpc.replicas) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fn }}-a2a-grpc
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {{- include "agentnexus.selector" (list . "a2a-grpc") | nindent 6 }}
+{{- end }}

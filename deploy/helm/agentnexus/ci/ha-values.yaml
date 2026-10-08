@@ -1,0 +1,13 @@
+# 고가용성: HPA + PDB + RWX 볼륨 + 외부 DB·Valkey + OPA + Gateway API + ServiceMonitor
+autoscaling: { enabled: true, minReplicas: 2, maxReplicas: 6 }
+persistence: { accessMode: ReadWriteMany, storageClass: nfs }
+postgresql: { enabled: false }
+valkey: { enabled: false, url: "redis://valkey.data.svc:6379/0" }
+secrets: { existingSecret: agentnexus-prod, rotationNonce: "2026-10-08-1" }  # 외부 Secret 키 교체 뒤 값을 바꿔 재기동
+config: { policyEngine: opa }
+opa: { enabled: true }
+httpRoute: { enabled: true, parentRefs: [{ name: kgateway, namespace: kgateway-system }], hostnames: [agentnexus.example.com] }
+metrics: { serviceMonitor: { enabled: true }, prometheusRule: { enabled: true } }
+networkPolicy: { ingressFrom: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kgateway-system } } }] }
+a2aGrpc: { enabled: true, replicas: 2, publicUrl: "grpcs://grpc.agentnexus.example.com:443", tls: { secretName: agentnexus-grpc-tls }, ingress: { enabled: true, className: nginx, host: grpc.agentnexus.example.com, tls: [{ secretName: agentnexus-grpc-tls, hosts: [grpc.agentnexus.example.com] }] } }
+api: { topologySpreadConstraints: [{ maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: DoNotSchedule }] }

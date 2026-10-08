@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["image", "components", "publicBaseUrl", "api", "persistence", "config"],
+  "properties": {
+    "image": {
+      "type": "object", "required": ["repository", "tag"],
+      "properties": { "repository": { "type": "string", "minLength": 1 }, "tag": { "type": ["string", "number"] }, "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] } }
+    },
+    "components": { "type": "string", "pattern": "^(all|((identity|registry|gateway|host|observe|admin|console)(,(identity|registry|gateway|host|observe|admin|console))*))$" },
+    "publicBaseUrl": { "type": "string", "pattern": "^https?://" },
+    "api": {
+      "type": "object",
+      "properties": { "replicas": { "type": "integer", "minimum": 1 }, "workers": { "type": "integer", "minimum": 1, "maximum": 16 }, "extraEnv": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } } }
+    },
+    "autoscaling": {
+      "type": "object",
+      "properties": { "minReplicas": { "type": "integer", "minimum": 1 }, "maxReplicas": { "type": "integer", "minimum": 1 }, "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 } }
+    },
+    "persistence": { "type": "object", "properties": { "accessMode": { "enum": ["ReadWriteOnce", "ReadWriteMany", "ReadWriteOncePod"] } } },
+    "config": {
+      "type": "object",
+      "properties": {
+        "rateLimitBackend": { "enum": ["redis", "memory"] },
+        "policyEngine": { "enum": ["builtin", "opa"] },
+        "spanProcessor": { "enum": ["batch", "simple"] },
+        "logLevel": { "enum": ["DEBUG", "INFO", "WARNING", "ERROR"] },
+        "accessTokenTtl": { "type": "integer", "minimum": 60, "maximum": 86400 }
+      }
+    },
+    "service": { "type": "object", "properties": { "type": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"] }, "port": { "type": "integer" } } }
+  }
+}

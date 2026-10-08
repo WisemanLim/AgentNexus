@@ -1,0 +1,82 @@
+# wise-agentnexus — 공통 정의 (모드별 오버레이와 함께 사용: make local-all | make prod-all)
+# 독립 실행(FR-W01): AGENTNEXUS_COMPONENTS=gateway,identity COMPOSE_PROFILES= make local-all  (참조 서버 = 프로파일 demo)
+# 네트워크: edge = 호스트 공개(api 만) · backend = internal(외부 차단) — 참조 MCP 서버·A2A·Valkey·DB 는 게이트웨이(api)만 접근 (FR-G00 우회 차단)
+x-app: &app
+  build: { context: ., dockerfile: Dockerfile, target: runtime }
+  image: wise-agentnexus-api:${APP_ENV:-local}
+services:
+  api:
+    <<: *app
+    ports: ["${BIND_HOST:-127.0.0.1}:${API_PORT:-8000}:8000"]
+    volumes: ["appdata:/app/data"]
+    environment:
+      COMPONENTS: ${AGENTNEXUS_COMPONENTS:-all}
+      MCP_SERVERS_URL: http://mcp-servers:8100
+      A2A_DEMO_URL: http://a2a-demo:8200
+      IDP_INTERNAL_URL: http://api:8000
+      GATEWAY_URL: http://api:8000
+    networks: [edge, backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+  mcp-servers:
+    <<: *app
+    profiles: ["demo"]
+    command: ["uvicorn", "app.builtin.mcp_servers:app", "--host", "0.0.0.0", "--port", "8100"]
+    environment:
+      AGENTNEXUS_ROLE: mcp-servers
+      UVICORN_WORKERS: "1"  # 데모 서버는 세션·Task 를 프로세스 메모리에 둔다 — runtime 이미지 기본 2 워커면 요청이 엇갈린다
+      MCP_SERVERS_URL: http://mcp-servers:8100
+      IDP_INTERNAL_URL: http://api:8000
+    volumes: ["appdata:/app/data:ro"]
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8100/healthz').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+  a2a-demo:
+    <<: *app
+    profiles: ["demo"]
+    command: ["uvicorn", "app.builtin.a2a_agent:app", "--host", "0.0.0.0", "--port", "8200"]
+    environment:
+      AGENTNEXUS_ROLE: a2a-demo
+      UVICORN_WORKERS: "1"  # 데모 서버는 세션·Task 를 프로세스 메모리에 둔다 — runtime 이미지 기본 2 워커면 요청이 엇갈린다
+      A2A_DEMO_URL: http://a2a-demo:8200
+      GATEWAY_URL: http://api:8000
+      IDP_INTERNAL_URL: http://api:8000
+    volumes: ["appdata:/app/data:ro"]
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8200/healthz').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+  # A2A gRPC 바인딩 수신 (D16-②) — 상태 없음: 요청을 게이트웨이(api) HTTP+JSON 바인딩으로 위임 (인증·정책·감사는 api)
+  a2a-grpc:
+    <<: *app
+    command: ["python", "-m", "app.grpc_server"]
+    ports: ["${BIND_HOST:-127.0.0.1}:${A2A_GRPC_PORT:-8851}:50051"]
+    environment:
+      AGENTNEXUS_ROLE: a2a-grpc
+      GATEWAY_URL: http://api:8000
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [edge]
+    healthcheck:  # grpc.health.v1 — readiness = 위임 대상 api 까지 (TLS 수신이면 TCP) (D20-③)
+      test: ["CMD", "python", "-m", "app.grpc_server", "--probe", "readiness"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+volumes:
+  appdata:
+networks:
+  edge: {}
+  backend:
+    internal: true

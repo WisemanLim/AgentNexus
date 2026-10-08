@@ -1,0 +1,185 @@
+# AgentNexus Helm values — docker compose(prod) 와 같은 구성을 Kubernetes 로. 시크릿은 values 에 평문으로 넣지 말고 existingSecret 권장.
+global:
+  # 에어갭: 사설 레지스트리 접두사 (예: registry.internal:5000) — 모든 이미지에 적용
+  imageRegistry: ""
+  imagePullSecrets: []
+
+image:
+  repository: wise-agentnexus-api   # make prod-build / nexus bundle export 로 만든 이미지
+  tag: prod
+  pullPolicy: IfNotPresent
+
+# 기동 구성요소 (FR-W01 독립 실행) — all 또는 identity,registry,gateway,host,observe,admin,console 의 부분집합
+components: all
+
+publicBaseUrl: http://agentnexus.local   # 외부 접속 URL (OIDC issuer·redirect_uri 기준)
+
+api:
+  replicas: 1
+  workers: 2
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 2Gi }
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []  # 존·노드 분산 (D18-③) — 예: [{maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: DoNotSchedule}] (labelSelector 는 차트가 채움)
+  extraEnv: {}            # 추가 비밀 아닌 env (예: OTLP_ENDPOINT)
+  forwardedAllowIps: "*"  # X-Forwarded-For 를 믿을 프록시 주소 — 운영은 Ingress 컨트롤러 파드 CIDR 로 좁힌다(넓으면 다른 파드가 클라이언트 IP 를 위조해 IP 허용 목록·감사 IP 를 속인다)
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true           # replicas > 1 일 때만 생성
+  minAvailable: 1
+
+# audit-archive 등 영속 파일 (/app/data). replicas > 1 이면 ReadWriteMany 필요
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 5Gi
+  storageClass: ""
+  existingClaim: ""
+
+config:
+  logLevel: INFO
+  accessTokenTtl: 3600
+  rateLimitBackend: redis     # redis(Valkey) | memory
+  policyEngine: builtin       # builtin | opa
+  spanProcessor: batch
+  otlpEndpoint: ""            # 외부 OTel Collector (비우면 내장 저장소만)
+  mcpRefreshOnStartS: 90
+  mcpHealthIntervalS: 60
+  a2aWatchIntervalS: 5
+  mcpConsentTimeoutS: 60      # MCP sampling·elicitation 동의 대기 (무응답 자동 거부)
+  schedulerIntervalS: 60      # 경보 평가·실행 복구 (리스로 1개 파드만)
+  dbStatementTimeoutMs: 120000  # PostgreSQL 문장 상한 (0 = 끔, D22-①)
+  dbLockTimeoutMs: 15000        # 잠금 대기 상한
+  dbIdleTxTimeoutMs: 0          # 트랜잭션 연 채 쉬는 연결 종료 — 스트림 요청 때문에 기본 끔
+  signingKeyPreviousUntil: ""   # env 이전 서명 키의 토큰 검증 끝(ISO 8601, D22-②)
+  signingRevokedKids: ""        # 폐기 kid(쉼표) — 유출 키는 어디서도 검증하지 않음
+  modelMaxInflightPerSubject: 32  # 주체별 동시 모델 요청 상한 (0 = 끔, D22-③)
+  retentionIntervalS: 3600    # 보존 기간 파기 점검
+  runStaleS: 90               # 생존 신호 없는 실행을 다른 파드가 이어받는 기준
+  a2aRemoteWaitS: 120
+  attachmentMaxMb: 20
+  mcpStdioAllowedCommands: ""
+  targetVersion: ""           # 업데이트 계획(SCR-L04) 대상 버전 — 비우면 현재 버전
+  cosignPublicKey: ""         # 이미지 서명 검증 cosign 공개키(PEM) — 비우면 미설정 표시
+
+# 시크릿 — existingSecret 을 쓰면 아래 값은 무시. 비워 두면 설치 시 생성하고 업그레이드 때 유지(lookup).
+secrets:
+  existingSecret: ""
+  bootstrapAdminPassword: ""
+  signingKeyPem: ""
+  encryptionKey: ""
+  signingKeyPemPrevious: ""     # 키 회전 — 직전 서명 키 PEM (토큰 수명 뒤 비움, D21-③)
+  encryptionKeyPrevious: ""     # 키 회전 — 직전 암호화 키(쉼표 구분, 재암호화 뒤 비움)
+  signingKeyPemNext: ""         # 2단계 회전 — 다음 서명 키(먼저 배포: JWKS·검증만, D22-②)
+  encryptionKeyNext: ""         # 2단계 회전 — 다음 암호화 키(복호화만)
+  rotationNonce: ""             # existingSecret 의 키를 바꿨을 때 값을 바꾸면 api·데모 파드 재기동 (체크섬이 그대로라서)
+  metricsToken: ""
+  otlpIngestToken: ""
+  a2aDemoClientSecret: ""
+
+database:
+  # 외부 PostgreSQL — postgresql.enabled=false 일 때 사용 (existingSecret 의 DATABASE_URL 권장)
+  url: ""
+
+postgresql:
+  enabled: true               # PoC·단일 클러스터용 내장 StatefulSet. 운영은 관리형 DB + database.url
+  image: { repository: postgres, tag: 17-alpine }
+  database: app
+  username: app
+  password: ""                # 비우면 생성
+  storage: { size: 10Gi, storageClass: "" }
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+
+valkey:
+  enabled: true               # 레이트리밋 토큰 버킷 (BSD-3, Redis 프로토콜)
+  image: { repository: valkey/valkey, tag: 8-alpine }
+  url: ""                     # 외부 Valkey/Redis — enabled=false 일 때
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+
+opa:
+  enabled: false              # config.policyEngine=opa 와 함께
+  image: { repository: openpolicyagent/opa, tag: 1.4.2 }
+
+# 데모 참조 서버 (가상 Jira·Confluence·Dynatrace·Internal API MCP + 원격 A2A 관측 분석 에이전트)
+demo:
+  enabled: true
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+
+# A2A gRPC 바인딩 수신 (D16-②·D17-②) — 상태 없음: RPC 를 api 의 HTTP+JSON 바인딩으로 위임(같은 인증·정책·감사)
+a2aGrpc:
+  enabled: false
+  replicas: 1
+  publicUrl: ""               # Agent Card 에 광고할 주소 (예: grpcs://grpc.agentnexus.local:443 — 비우면 GRPC 인터페이스 없음)
+  tls:
+    secretName: ""            # kubernetes.io/tls Secret — 지정하면 파드가 직접 TLS 수신(A2A_GRPC_TLS_CERT·KEY), 비우면 평문(h2c)
+  ingress:
+    enabled: false            # ingress-nginx 기준 backend-protocol GRPC(파드 TLS 면 GRPCS) — Ingress 가 TLS 종료
+    className: ""
+    host: grpc.agentnexus.local
+    annotations: {}
+    tls: []                   # [{ secretName: agentnexus-grpc-tls, hosts: [grpc.agentnexus.local] }]
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+  topologySpreadConstraints: []  # api 와 같은 형식 (labelSelector 는 차트가 채움) — replicas > 1 이면 PDB 도 (D20-③)
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: agentnexus.local
+  tls: []                     # [{ secretName: agentnexus-tls, hosts: [agentnexus.local] }]
+
+# Gateway API (kgateway 등) — UI 설계서 SCR-A03
+httpRoute:
+  enabled: false
+  parentRefs: []              # [{ name: kgateway, namespace: kgateway-system }]
+  hostnames: [agentnexus.local]
+
+# edge/backend 분리 (FR-G00 우회 차단): 참조 서버·DB·Valkey 는 api 파드에서만 접근
+networkPolicy:
+  enabled: true
+  ingressFrom: []             # api 로의 수신 허용 출처 (비우면 전체 — Ingress 컨트롤러 네임스페이스 지정 권장)
+
+metrics:
+  serviceMonitor:
+    enabled: false            # Prometheus Operator — secrets.metricsToken 으로 Bearer 스크레이프
+    interval: 30s
+  prometheusRule:
+    enabled: false            # Prometheus Operator 경보 규칙 (앱 내장 경보는 SCHEDULER_INTERVAL_S 로 자체 평가)
+    errorRate: 0.05
+    p95Seconds: 0.5
+    approvalsPending: 10
+    denyRate: 5
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile: { type: RuntimeDefault }
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: { drop: [ALL] }

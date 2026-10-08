@@ -1,0 +1,108 @@
+{{- if .Values.a2aGrpc.enabled }}
+{{- $fn := include "agentnexus.fullname" . -}}
+{{- $tls := not (empty .Values.a2aGrpc.tls.secretName) -}}
+# A2A gRPC 바인딩 (lf.a2a.v1.A2AService) — 상태 없음: RPC 를 api 의 HTTP+JSON 바인딩으로 위임 (인증·정책·감사는 api)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fn }}-a2a-grpc
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: a2a-grpc
+spec:
+  replicas: {{ .Values.a2aGrpc.replicas }}
+  selector:
+    matchLabels: {{- include "agentnexus.selector" (list . "a2a-grpc") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "agentnexus.selector" (list . "a2a-grpc") | nindent 8 }}
+    spec:
+      {{- include "agentnexus.podCommon" . | nindent 6 }}
+      {{- with .Values.a2aGrpc.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- range . }}
+        - {{- toYaml (merge (dict) . (dict "labelSelector" (dict "matchLabels" (include "agentnexus.selector" (list $ "a2a-grpc") | fromYaml)))) | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: a2a-grpc
+          image: {{ include "agentnexus.image" (list . .Values.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["python", "-m", "app.grpc_server"]
+          env:
+            - { name: AGENTNEXUS_ROLE, value: a2a-grpc }
+            {{- range $k := list "GATEWAY_URL" "A2A_GRPC_TLS_CERT" "A2A_GRPC_TLS_KEY" "LOG_LEVEL" "APP_ENV" }}
+            - name: {{ $k }}
+              valueFrom: { configMapKeyRef: { name: {{ $fn }}-config, key: {{ $k }} } }
+            {{- end }}
+          ports:
+            - { name: grpc, containerPort: 50051 }
+          {{- if $tls }}  # gRPC 프로브는 TLS 를 말하지 못한다 — TLS 수신이면 TCP
+          readinessProbe:
+            tcpSocket: { port: grpc }
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: grpc }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          {{- else }}  # grpc.health.v1 — readiness 는 위임 대상 api 의 /health 까지 (D20-③)
+          readinessProbe:
+            grpc: { port: 50051, service: readiness }
+            periodSeconds: 10
+            failureThreshold: 6  # DB 장애조치 순간(수십 초) 전 파드가 함께 NotReady 로 빠지지 않게 (D22-⑥)
+          livenessProbe:
+            grpc: { port: 50051 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          {{- end }}
+          resources: {{- toYaml .Values.a2aGrpc.resources | nindent 12 }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }  # 읽기 전용 루트 — 진입점의 메트릭 디렉터리(/tmp/prometheus)
+            {{- if $tls }}
+            - { name: tls, mountPath: /tls, readOnly: true }
+            {{- end }}
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        {{- if $tls }}
+        - name: tls
+          secret: { secretName: {{ .Values.a2aGrpc.tls.secretName }} }
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fn }}-a2a-grpc
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "agentnexus.selector" (list . "a2a-grpc") | nindent 4 }}
+  ports:
+    - { name: grpc, port: 50051, targetPort: grpc, appProtocol: grpc }
+{{- if .Values.a2aGrpc.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fn }}-a2a-grpc
+  labels: {{- include "agentnexus.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: {{ ternary "GRPCS" "GRPC" $tls }}
+    {{- with .Values.a2aGrpc.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.a2aGrpc.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.a2aGrpc.ingress.tls }}
+  tls: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.a2aGrpc.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: {{ $fn }}-a2a-grpc, port: { name: grpc } }
+{{- end }}
+{{- end }}
