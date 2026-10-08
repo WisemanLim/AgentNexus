@@ -17,7 +17,7 @@ EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 # web-dev: 콘솔 SPA(React + Vite) 개발 서버 — 의존성 설치는 이미지 빌드 안에서만 (local 은 src 만 바인드)
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS web-dev
+FROM node:26-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS web-dev
 RUN npm install -g pnpm@10.12.1
 WORKDIR /web
 ARG PNPM_FROZEN=1
