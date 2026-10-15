@@ -35,7 +35,7 @@ FROM web-dev AS web-build
 RUN pnpm build
 
 # e2e: 콘솔 브라우저 스모크 (Playwright · Chromium) — compose e2e 프로파일에서만 사용
-FROM mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 AS e2e
+FROM mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf AS e2e
 WORKDIR /e2e
 ARG NPM_LOCKED=1
 COPY web/e2e/package.json web/e2e/package-lock.json* ./
