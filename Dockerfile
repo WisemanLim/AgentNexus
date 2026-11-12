@@ -1,6 +1,6 @@
 # wise-agentnexus — python-fastapi (multi-stage: dev = local 모드, runtime = prod 모드)
 # 베이스 이미지는 digest 고정 — 갱신은 Dependabot(docker) PR (D17-③)
-FROM python:3.12-slim@sha256:dddfd7e07f9d15aeeca61529320492139d21cac7f0070c00609243e51e4e0016 AS base
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv UV_LINK_MODE=copy PATH=/opt/venv/bin:$PATH PYTHONPATH=/app
 RUN pip install --no-cache-dir uv==0.12.23
